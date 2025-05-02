@@ -14,7 +14,6 @@ export const APIRoute = createAPIFileRoute('/api/createsession')({
 
       const decoded = verifyClerkJWT(token)
 
-      // Create a new session token that lasts for 24 hours
       const sessionToken = jwt.sign(
         {
           userId: decoded.sub,
@@ -22,7 +21,7 @@ export const APIRoute = createAPIFileRoute('/api/createsession')({
           type: 'session'
         },
         sessionSecret,
-        { expiresIn: '24h' }
+        { expiresIn: '7d' }
       )
 
       resolveDefer(defcode, {

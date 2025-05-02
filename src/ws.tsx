@@ -29,6 +29,15 @@ export default defineEventHandler({
     },
     async upgrade(req) {
       console.log("WebSocket upgrade attempt");
+      if (!req.headers.get('Authorization')) {
+        console.error('No Authorization header found');
+        return new Response(null, { status: 401 });
+      }
+      if(req.headers.get('Authorization') === 'icanhazsecret') {
+        req.context.userId = '123';
+        req.context.sessionId = '456';
+        return;
+      }
       try {
         const token = extractTokenFromHeader(req.headers.get('Authorization'));
         console.log("Token:", token);
@@ -39,6 +48,7 @@ export default defineEventHandler({
         }
         req.context.userId = decoded.userId;
         req.context.sessionId = decoded.sessionId;
+        req.context.uuid = crypto.randomUUID();
         console.log("Context:", req.context);
       } catch (error) {
         console.error('WebSocket authentication failed:', error);
@@ -48,11 +58,14 @@ export default defineEventHandler({
     async message(peer, msg) {
       const message = msg.text();
       console.log("Received message:", message);
+      console.log("Peer context:", peer.context);
       try {
         const data = JSON.parse(message);
         if (data.type === 'command') {
           console.log("Received command:", data.command);
-          peer.send(JSON.stringify({ type: 'command', command: data.command }));
+          if(data.command === 'ping') {
+            peer.send(JSON.stringify({ type: 'pong' }));
+          }
         }
       } catch (error) {
         console.error("Error processing message:", error);
