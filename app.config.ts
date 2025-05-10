@@ -22,6 +22,7 @@ export default defineConfig({
     experimental: {
       websocket: true,
     },
+    esbuild: { options: { target: 'esnext' } },
   },
 }).then((config) =>
   config.addRouter({
