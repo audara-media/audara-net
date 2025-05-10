@@ -2,15 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { getWebRequest } from '@tanstack/react-start/server'
 import { getAuth } from '@clerk/tanstack-react-start/server'
 
-interface WebSocketPeer {
-  send: (message: string) => void;
-}
-
-// This will be populated by the WebSocket handler
-export const connectedPeers = new Map<string, { peer: WebSocketPeer; userId: string }>();
-
 export const sendWebSocketCommand = createServerFn({ method: 'POST' }).handler(async (ctx) => {
+  const { queue, ch2 } = await import('./queueManager');
   console.log('Received context:', ctx);
+  
   
   if (!ctx.data) {
     throw new Error('No data received in request');
@@ -18,26 +13,28 @@ export const sendWebSocketCommand = createServerFn({ method: 'POST' }).handler(a
 
   const formData = ctx.data as FormData;
   const command = formData.get('command') as string;
-  const peerId = formData.get('peerId') as string | null;
+  const keyCode = formData.get('keyCode') as string | null;
 
-  if (!command) {
-    throw new Error('No command specified in request');
+  if (!command && !keyCode) {
+    throw new Error('No command or keyCode specified in request');
   }
 
   const { userId } = await getAuth(getWebRequest()!)
+  console.log("User ID:", userId);
   
   if (!userId) {
     throw new Error('User not authenticated')
   }
 
-  // Find the peer for this user
-  const peer = connectedPeers.get(peerId || userId)
-  if (!peer) {
-    throw new Error('No connected peer found for user')
-  }
+  const message = keyCode 
+    ? { type: 'keyCode', keyCode, userId }
+    : { type: 'command', command };
 
-  // Send the command through the WebSocket
-  peer.peer.send(JSON.stringify({ type: 'command', command }))
+  ch2.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
   
-  return { success: true, command }
+  return { 
+    success: true, 
+    command: command || 'keyCode',
+    keyCode: keyCode || undefined
+  }
 }) 

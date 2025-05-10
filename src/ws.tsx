@@ -3,12 +3,25 @@ import {
   defineWebSocket,
 } from "@tanstack/react-start/server";
 import { verifySessionToken, extractTokenFromHeader } from './lib/verifyJWT';
-import { connectedPeers } from './lib/websocket';
+import { peerManager } from './lib/peerManager';
+import { queue, ch1, ch2 } from './lib/queueManager';
 
 interface PeerContext {
   userId: string;
   sessionId: string;
 }
+
+ch1.consume(queue, (msg) => {
+  if (msg !== null) {;
+    ch1.ack(msg);
+    const data = JSON.parse(msg.content.toString());
+    if(data.type === 'keyCode') {
+      peerManager.sendToPeer(data.userId, { userId: data.userId, type: 'keyCode', keyCode: data.keyCode });
+    }
+  } else {
+    console.log('Consumer cancelled by server');
+  }
+});
 
 export default defineEventHandler({
   handler() {
@@ -22,10 +35,8 @@ export default defineEventHandler({
         console.error('No userId found in peer context');
         return;
       }
-      connectedPeers.set(peer.id, { peer, userId: context.userId });
-      peer.publish("test", `User ${peer} has connected!`);
-      peer.send("You have connected successfully!");
-      peer.subscribe("test");
+      peerManager.addPeer(context.userId, peer);
+      peer.send(JSON.stringify({ type: 'register-app', peerId: peer.id }));
     },
     async upgrade(req) {
       console.log("WebSocket upgrade attempt");
@@ -35,21 +46,15 @@ export default defineEventHandler({
       }
       if(req.headers.get('Authorization') === 'icanhazsecret') {
         req.context.userId = '123';
-        req.context.sessionId = '456';
         return;
       }
       try {
         const token = extractTokenFromHeader(req.headers.get('Authorization'));
-        console.log("Token:", token);
         const decoded = verifySessionToken(token);
-        console.log("Decoded:", decoded);
         if (!decoded) {
           return new Response(null, { status: 401 });
         }
         req.context.userId = decoded.userId;
-        req.context.sessionId = decoded.sessionId;
-        req.context.uuid = crypto.randomUUID();
-        console.log("Context:", req.context);
       } catch (error) {
         console.error('WebSocket authentication failed:', error);
         return new Response(null, { status: 401 });
@@ -57,12 +62,9 @@ export default defineEventHandler({
     },
     async message(peer, msg) {
       const message = msg.text();
-      console.log("Received message:", message);
-      console.log("Peer context:", peer.context);
       try {
         const data = JSON.parse(message);
         if (data.type === 'command') {
-          console.log("Received command:", data.command);
           if(data.command === 'ping') {
             peer.send(JSON.stringify({ type: 'pong' }));
           }
@@ -73,8 +75,11 @@ export default defineEventHandler({
     },
     async close(peer, details) {
       console.log("WebSocket connection closed for peer:", peer.id, "Reason:", details.reason);
-      connectedPeers.delete(peer.id);
-      peer.publish("test", `User ${peer} has disconnected!`);
+      const context = peer.context as unknown as PeerContext;
+      
+      if (context.userId) {
+        peerManager.removePeer(context.userId, peer.id);
+      }
     },
     async error(peer, error) {
       console.error("WebSocket error for peer:", peer.id, "Error:", error);
