@@ -15,7 +15,7 @@ interface SessionTokenPayload extends jwt.JwtPayload {
 }
 
 const publicKey = readFileSync(join(process.cwd(), 'src/keys/clerk.pem'), 'utf-8')
-const permittedOrigins = ['http://localhost:3000']
+const permittedOrigins = ['http://localhost:3000', 'https://audara-net.onrender.com', 'https://audara.net']
 
 export function verifyClerkJWT(token: string): ClerkJwtPayload {
   const options: jwt.VerifyOptions = { algorithms: ['RS256'] }
